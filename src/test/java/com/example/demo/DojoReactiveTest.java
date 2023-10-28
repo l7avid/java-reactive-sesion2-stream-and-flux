@@ -2,11 +2,16 @@ package com.example.demo;
 
 
 import org.junit.jupiter.api.Test;
+import org.junit.platform.commons.util.StringUtils;
 import reactor.core.publisher.Flux;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import static java.lang.Boolean.parseBoolean;
 
 public class DojoReactiveTest {
 
@@ -83,9 +88,14 @@ public class DojoReactiveTest {
         List<Player> readCsv = CsvUtilFile.getPlayers();
         Flux<Player> observable = Flux.fromIterable(readCsv);
 
-        observable.sort(Comparator.comparing(Player::getNational))
-                .distinct()
-                .subscribe(System.out::println);
+        observable.collectMultimap(Player::getNational, Player::getClub)
+                .subscribe(clubsAgrupadosPorNacionalidad -> {
+                    clubsAgrupadosPorNacionalidad.forEach((nacionalidad, club) -> {
+                        System.out.println("Nacionalidad: " + nacionalidad);
+                        System.out.println("Club: " + club + "\n");
+
+                    });
+                });
     }
 
     @Test
@@ -94,29 +104,31 @@ public class DojoReactiveTest {
         Flux<Player> observable = Flux.fromIterable(readCsv);
         AtomicInteger highestWinners = new AtomicInteger(Integer.MIN_VALUE);
 
-        observable.sort(Comparator.comparing(Player::getClub))
-                .distinct()
-                .filter(player ->
-                {
-                    int bestPlayer = highestWinners.get();
-                    if(player.getWinners() > bestPlayer)
-                    {
-                        highestWinners.set(player.winners);
-                        return true;
-                    }
-                    if(player.getWinners() == highestWinners.get())
-                    {
-                        return true;
-                    }
-                    return false;
-                })
-                .subscribe(System.out::println)
-        ;
-
+        observable.filter(player -> {
+            int bestPlayer = highestWinners.get();
+            if(player.getWinners() > highestWinners.get())
+            {
+                highestWinners.set(player.winners);
+                return true;
+            }
+            return false;
+        })
+            .subscribe(player -> System.out.println("El club con el mejor jugador es: " + player.getClub()));
     }
 
     @Test
     void clubConElMejorJugador2() {
+        List<Player> readCsv = CsvUtilFile.getPlayers();
+        Flux<Player> observable = Flux.fromIterable(readCsv);
+
+        observable.reduce((player1, player2) -> {
+            if(player1.getWinners() > player2.getWinners())
+            {
+                return player1;
+            }
+            return player2;
+        })
+                .subscribe(player -> System.out.println("El club con el mejor jugador es: " + player.getClub()));
     }
 
     @Test
@@ -139,12 +151,24 @@ public class DojoReactiveTest {
             }
             return false;
         })
-        .subscribe(System.out::println);
+        .subscribe(player -> {
+            System.out.println(player.getName());
+        });
     }
 
     @Test
     void ElMejorJugador2() {
+        List<Player> readCsv = CsvUtilFile.getPlayers();
+        Flux<Player> observable = Flux.fromIterable(readCsv);
 
+        observable.reduce((player1, player2) -> {
+                    if(player1.getWinners() > player2.getWinners())
+                    {
+                        return player1;
+                    }
+                    return player2;
+                })
+                .subscribe(player -> System.out.println("El mejor jugador es " + player.getName()));
     }
 
     @Test
@@ -152,10 +176,14 @@ public class DojoReactiveTest {
 
         List<Player> readCsv = CsvUtilFile.getPlayers();
         Flux<Player> observable = Flux.fromIterable(readCsv);
-        AtomicInteger highestWinners = new AtomicInteger(Integer.MIN_VALUE);
-        AtomicReference<String> bestPlayerNationality = new AtomicReference<>("");
 
-
+        observable.collect(Collectors.groupingBy(Player::getNational, Collectors.maxBy(Comparator.comparing(Player::getWinners))))
+                .subscribe(player -> {
+                    player.forEach((nationality, bestPlayer) -> {
+                        System.out.println("Nacionalidad: " + nationality);
+                        System.out.println("Mejor jugador: " + (bestPlayer.isPresent() ? bestPlayer.get().getName() : "") + "\n");
+                    });
+                });
     }
 
 }
